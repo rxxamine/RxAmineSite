@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "Tool": {
+      "title": "Tool",
+      "description": "A downloadable tool entry",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "downloadUrl": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "section": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "downloadUrl", "section", "createdAt", "updatedAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Site-wide settings",
+      "type": "object",
+      "properties": {
+        "discordWebhookUrl": { "type": "string" },
+        "siteName": { "type": "string" },
+        "siteDescription": { "type": "string" }
+      }
+    },
+    "Categories": {
+      "title": "Categories",
+      "description": "List of authorized tool categories",
+      "type": "object",
+      "properties": {
+        "list": { 
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/tools/{toolId}": {
+      "schema": "Tool",
+      "description": "Collection of tools"
+    },
+    "/settings/config": {
+      "schema": "Settings",
+      "description": "Global site configuration"
+    },
+    "/settings/categories": {
+      "schema": "Categories",
+      "description": "Authorized categories list"
+    }
+  }
+}
