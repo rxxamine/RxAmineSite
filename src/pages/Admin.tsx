@@ -91,6 +91,124 @@ export default function Admin() {
   const [showConfirmRecent, setShowConfirmRecent] = useState(false);
   const [showConfirmCheats, setShowConfirmCheats] = useState(false);
 
+  // Auto-provision default tools if missing
+  const provisionDefaults = async (force = false) => {
+    if (!isAdmin || loading) return;
+    
+    // If not forcing, check if we already have tools to avoid double-provisioning
+    if (!force && tools.length > 0) return;
+
+    const toastId = toast.loading("Restoring default repository data...");
+
+    const defaultTools = [
+      {
+        name: "Wurst-Imperium",
+        description: "Advanced Minecraft Cheat Client with built-in features for competitive play.",
+        downloadUrl: "https://shrinkme.click/G04T2gY",
+        imageUrl: "https://camo.githubusercontent.com/9a6016b447758207f4f626b34211ed437ea941f37d131ebbd7ff0556bc079a15/68747470733a2f2f692e696d6775722e636f6d2f446868714c58392e706e67",
+        section: "cheats",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        name: "YimMenu",
+        description: "A popular and feature-rich mod menu for Grand Theft Auto V.",
+        downloadUrl: "https://shrinkme.click/ym2DVo",
+        imageUrl: "https://yimmenu.org/wp-content/uploads/2024/05/YimMenu-vs.-Alacritty2.jpg",
+        section: "cheats",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        name: "BT-FiveM-Extranel-v2",
+        description: "External toolset for FiveM performance and utility enhancement.",
+        downloadUrl: "https://shrinkme.click/Qh5FSL",
+        imageUrl: "https://i.ibb.co/8D8vXyz/fivem.jpg",
+        section: "fivem",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        name: "zensware-v1.2",
+        description: "Premium external tool for competitive FPS games. (WinRAR PW: RxWare)",
+        downloadUrl: "https://shrinkme.click/3RoML4",
+        imageUrl: "https://i.ibb.co/Fb2BJtKY/0-TVBOpl-SS9g-HD.jpg",
+        section: "cheats",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        name: "Ghost Spoofer",
+        description: "Advanced HWID Spoofer to bypass hardware bans on multiple games.",
+        downloadUrl: "https://shrinkme.click/gGI3Xa",
+        imageUrl: "https://i.ibb.co/6YZB6f2/spoofer.jpg",
+        section: "spofers",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        name: "Blank-Grabber",
+        description: "Utility for security auditing and educational testing.",
+        downloadUrl: "https://shrinkme.click/xyZWhbj",
+        imageUrl: "https://media.licdn.com/dms/image/v2/D5622AQEhPfvUc-zzyA/feedshare-shrink_2048_1536/B56ZTvTGAzHEAo-/0/1739181548483?e=2147483647&v=beta&t=O-exRUQSwFcP4UyD_c4ujqzAani8oPbmqMKblkJGXLg",
+        section: "grabbers",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        name: "RxSpoofer 1",
+        description: "High-level hardware identity modification tool for maximum safety.",
+        downloadUrl: "https://shrinkme.click/kEYM694a",
+        imageUrl: "https://t2conline.com/wp-content/uploads/2022/07/maxresdefault-2.jpg",
+        section: "spoofers",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        name: "BuLLeT Lua Executor v3.0",
+        description: "Reliable and fast LUA executor for FiveM server environments.",
+        downloadUrl: "https://shrinkme.click/5d2Wh",
+        imageUrl: "https://i.ibb.co/JFq6DKmf/2-E8-Dz-dy-Gsw-HD.jpg",
+        section: "fivem",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ];
+
+    for (const tool of defaultTools) {
+      try {
+        await addDoc(collection(db, 'tools'), tool);
+        console.log(`Provisioned ${tool.name}`);
+      } catch (err) {
+        console.error(`Error provisioning ${tool.name}:`, err);
+      }
+    }
+    toast.success("Restored default site data", { id: toastId });
+  };
+
+  // Auto-provision default categories/settings if missing
+  const checkDefaults = async () => {
+    try {
+      const catDoc = await getDoc(doc(db, 'settings', 'categories'));
+      if (!catDoc.exists()) {
+        await setDoc(doc(db, 'settings', 'categories'), { list: ['fivem', 'spoofers', 'spofers', 'cheats', 'tweaks', 'grabbers'] });
+        console.log("Provisioned default categories");
+      }
+      
+      const configDoc = await getDoc(doc(db, 'settings', 'config'));
+      if (!configDoc.exists()) {
+        await setDoc(doc(db, 'settings', 'config'), {
+          siteName: "RX ELITE",
+          siteDescription: "Premium Game Enhancement Repository",
+          discordWebhookUrl: ""
+        });
+        console.log("Provisioned default config");
+      }
+    } catch (err) {
+      console.error("Default provisioning error:", err);
+    }
+  };
+
   useEffect(() => {
     if (!loading && !isAdmin) {
       navigate('/');
@@ -100,103 +218,7 @@ export default function Admin() {
   useEffect(() => {
     if (!isAdmin) return;
 
-    // Auto-provision default tools if missing
-    const provisionDefaults = async (force = false) => {
-      if (!isAdmin || loading) return;
-      
-      // If not forcing, check if we already have tools to avoid double-provisioning
-      if (!force && tools.length > 0) return;
-
-      const toastId = toast.loading("Restoring default repository data...");
-
-      const defaultTools = [
-        {
-          name: "Wurst-Imperium",
-          description: "Advanced Minecraft Cheat Client with built-in features for competitive play.",
-          downloadUrl: "https://shrinkme.click/G04T2gY",
-          imageUrl: "https://camo.githubusercontent.com/9a6016b447758207f4f626b34211ed437ea941f37d131ebbd7ff0556bc079a15/68747470733a2f2f692e696d6775722e636f6d2f446868714c58392e706e67",
-          section: "cheats",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        {
-          name: "YimMenu",
-          description: "A popular and feature-rich mod menu for Grand Theft Auto V.",
-          downloadUrl: "https://shrinkme.click/ym2DVo",
-          imageUrl: "https://yimmenu.org/wp-content/uploads/2024/05/YimMenu-vs.-Alacritty2.jpg",
-          section: "cheats",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        {
-          name: "BT-FiveM-Extranel-v2",
-          description: "External toolset for FiveM performance and utility enhancement.",
-          downloadUrl: "https://shrinkme.click/Qh5FSL",
-          imageUrl: "https://i.ibb.co/8D8vXyz/fivem.jpg",
-          section: "fivem",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        {
-          name: "zensware-v1.2",
-          description: "Premium external tool for competitive FPS games. (WinRAR PW: RxWare)",
-          downloadUrl: "https://shrinkme.click/3RoML4",
-          imageUrl: "https://i.ibb.co/Fb2BJtKY/0-TVBOpl-SS9g-HD.jpg",
-          section: "cheats",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        {
-          name: "Ghost Spoofer",
-          description: "Advanced HWID Spoofer to bypass hardware bans on multiple games.",
-          downloadUrl: "https://shrinkme.click/gGI3Xa",
-          imageUrl: "https://i.ibb.co/6YZB6f2/spoofer.jpg",
-          section: "spofers",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        {
-          name: "Blank-Grabber",
-          description: "Utility for security auditing and educational testing.",
-          downloadUrl: "https://shrinkme.click/xyZWhbj",
-          imageUrl: "https://media.licdn.com/dms/image/v2/D5622AQEhPfvUc-zzyA/feedshare-shrink_2048_1536/B56ZTvTGAzHEAo-/0/1739181548483?e=2147483647&v=beta&t=O-exRUQSwFcP4UyD_c4ujqzAani8oPbmqMKblkJGXLg",
-          section: "grabbers",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        {
-          name: "RxSpoofer 1",
-          description: "High-level hardware identity modification tool for maximum safety.",
-          downloadUrl: "https://shrinkme.click/kEYM694a",
-          imageUrl: "https://t2conline.com/wp-content/uploads/2022/07/maxresdefault-2.jpg",
-          section: "spoofers",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        {
-          name: "BuLLeT Lua Executor v3.0",
-          description: "Reliable and fast LUA executor for FiveM server environments.",
-          downloadUrl: "https://shrinkme.click/5d2Wh",
-          imageUrl: "https://i.ibb.co/JFq6DKmf/2-E8-Dz-dy-Gsw-HD.jpg",
-          section: "fivem",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
-      ];
-
-      for (const tool of defaultTools) {
-        try {
-          await addDoc(collection(db, 'tools'), tool);
-          console.log(`Provisioned ${tool.name}`);
-        } catch (err) {
-          console.error(`Error provisioning ${tool.name}:`, err);
-        }
-      }
-      toast.success("Restored default site data", { id: toastId });
-    };
-    
     // Use a ref to track if we've already tried to auto-provision in this session
-    // to avoid loops if Firebase is slow to update the local 'tools' state
     if (tools.length === 0 && !loading && isAdmin) {
       const hasAutoProvisioned = sessionStorage.getItem('rx_auto_provisioned');
       if (!hasAutoProvisioned) {
@@ -205,28 +227,6 @@ export default function Admin() {
       }
     }
 
-    // Auto-provision default categories/settings if missing
-    const checkDefaults = async () => {
-      try {
-        const catDoc = await getDoc(doc(db, 'settings', 'categories'));
-        if (!catDoc.exists()) {
-          await setDoc(doc(db, 'settings', 'categories'), { list: ['fivem', 'spoofers', 'spofers', 'cheats', 'tweaks', 'grabbers'] });
-          console.log("Provisioned default categories");
-        }
-        
-        const configDoc = await getDoc(doc(db, 'settings', 'config'));
-        if (!configDoc.exists()) {
-          await setDoc(doc(db, 'settings', 'config'), {
-            siteName: "RX ELITE",
-            siteDescription: "Premium Game Enhancement Repository",
-            discordWebhookUrl: ""
-          });
-          console.log("Provisioned default config");
-        }
-      } catch (err) {
-        console.error("Default provisioning error:", err);
-      }
-    };
     checkDefaults();
 
     const q = query(collection(db, 'tools'), orderBy('createdAt', 'desc'));
@@ -360,6 +360,7 @@ export default function Admin() {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (header) => header.toLowerCase().trim(),
       complete: (results) => {
         toast.dismiss(toastId);
         const data = results.data as any[];
@@ -367,7 +368,23 @@ export default function Admin() {
           toast.error("The CSV file is empty");
           return;
         }
-        setBulkUploadData(data);
+        
+        // Normalize column names
+        const normalizedData = data.map(row => {
+          const newRow: any = {};
+          Object.keys(row).forEach(key => {
+            const lowKey = key.toLowerCase();
+            if (lowKey.includes('name') || lowKey === 'title') newRow.name = row[key];
+            else if (lowKey.includes('desc')) newRow.description = row[key];
+            else if (lowKey.includes('url') && !lowKey.includes('image')) newRow.downloadUrl = row[key];
+            else if (lowKey.includes('image') || lowKey.includes('img') || lowKey.includes('pic')) newRow.imageUrl = row[key];
+            else if (lowKey.includes('section') || lowKey.includes('cat')) newRow.section = row[key];
+            else newRow[key] = row[key]; // Keep original as fallback
+          });
+          return newRow;
+        });
+
+        setBulkUploadData(normalizedData);
         setShowBulkConfirm(true);
       },
       error: (error) => {
