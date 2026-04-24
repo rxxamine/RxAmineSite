@@ -23,7 +23,7 @@ service cloud.firestore {
         && data.description is string && data.description.size() <= 5000
         && data.downloadUrl is string && data.downloadUrl.size() <= 1000
         && data.imageUrl is string && data.imageUrl.size() <= 1000
-        && data.section is string && data.section in ['elite', 'fivem', 'spoofers', 'spofers', 'cheats', 'tweaks', 'grabbers']
+        && data.section is string && data.section in ['elite', 'fivem', 'spofers', 'cheats', 'tweaks', 'grabbers', 'tools']
         && data.createdAt is string
         && data.updatedAt is string;
     }

@@ -132,9 +132,27 @@
 
 @keyframes progress-indeterminate {
   0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes scanning {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(200%); }
+}
+
+@keyframes spin-reverse {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
 }
 
 .animate-progress-indeterminate {
-  animation: progress-indeterminate 1.5s infinite linear;
+  animation: progress-indeterminate 1.5s ease-in-out infinite;
+}
+
+.animate-scanning {
+  animation: scanning 3s linear infinite;
+}
+
+.animate-spin-reverse {
+  animation: spin-reverse 1s linear infinite;
 }

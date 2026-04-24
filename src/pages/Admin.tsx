@@ -10,12 +10,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../lib/firebase';
 import { handleFirestoreError } from '../lib/errorHandlers';
 import { toast } from 'sonner';
 import { Plus, Trash2, Edit2, Save, X, BellRing, Upload, FileDown, AlertCircle, CheckCircle2, Info, Image as ImageIcon, Loader2, Key, ShieldAlert, ArrowLeft } from 'lucide-react';
 import Papa from 'papaparse';
+import { Progress } from '@/components/ui/progress';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,7 +44,7 @@ interface Settings {
   siteDescription: string;
 }
 
-const ALLOWED_CATEGORIES = ['elite', 'fivem', 'spoofers', 'spofers', 'cheats', 'tweaks', 'grabbers'];
+const ALLOWED_CATEGORIES = ['elite', 'fivem', 'spofers', 'cheats', 'tweaks', 'grabbers', 'tools'];
 
 export default function Admin() {
   const { user, loading, isAdmin } = useAuth();
@@ -84,130 +85,14 @@ export default function Admin() {
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [bulkUploadErrors, setBulkUploadErrors] = useState<{ row: number; name: string; error: string }[]>([]);
   const [isImageUploading, setIsImageUploading] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState(0);
   const [isFileUploading, setIsFileUploading] = useState(false);
+  const [fileUploadProgress, setFileUploadProgress] = useState(0);
   const [deleteCount, setDeleteCount] = useState(1);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
   const [showConfirmRecent, setShowConfirmRecent] = useState(false);
   const [showConfirmCheats, setShowConfirmCheats] = useState(false);
-
-  // Auto-provision default tools if missing
-  const provisionDefaults = async (force = false) => {
-    if (!isAdmin || loading) return;
-    
-    // If not forcing, check if we already have tools to avoid double-provisioning
-    if (!force && tools.length > 0) return;
-
-    const toastId = toast.loading("Restoring default repository data...");
-
-    const defaultTools = [
-      {
-        name: "Wurst-Imperium",
-        description: "Advanced Minecraft Cheat Client with built-in features for competitive play.",
-        downloadUrl: "https://shrinkme.click/G04T2gY",
-        imageUrl: "https://camo.githubusercontent.com/9a6016b447758207f4f626b34211ed437ea941f37d131ebbd7ff0556bc079a15/68747470733a2f2f692e696d6775722e636f6d2f446868714c58392e706e67",
-        section: "cheats",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        name: "YimMenu",
-        description: "A popular and feature-rich mod menu for Grand Theft Auto V.",
-        downloadUrl: "https://shrinkme.click/ym2DVo",
-        imageUrl: "https://yimmenu.org/wp-content/uploads/2024/05/YimMenu-vs.-Alacritty2.jpg",
-        section: "cheats",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        name: "BT-FiveM-Extranel-v2",
-        description: "External toolset for FiveM performance and utility enhancement.",
-        downloadUrl: "https://shrinkme.click/Qh5FSL",
-        imageUrl: "https://i.ibb.co/8D8vXyz/fivem.jpg",
-        section: "fivem",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        name: "zensware-v1.2",
-        description: "Premium external tool for competitive FPS games. (WinRAR PW: RxWare)",
-        downloadUrl: "https://shrinkme.click/3RoML4",
-        imageUrl: "https://i.ibb.co/Fb2BJtKY/0-TVBOpl-SS9g-HD.jpg",
-        section: "cheats",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        name: "Ghost Spoofer",
-        description: "Advanced HWID Spoofer to bypass hardware bans on multiple games.",
-        downloadUrl: "https://shrinkme.click/gGI3Xa",
-        imageUrl: "https://i.ibb.co/6YZB6f2/spoofer.jpg",
-        section: "spofers",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        name: "Blank-Grabber",
-        description: "Utility for security auditing and educational testing.",
-        downloadUrl: "https://shrinkme.click/xyZWhbj",
-        imageUrl: "https://media.licdn.com/dms/image/v2/D5622AQEhPfvUc-zzyA/feedshare-shrink_2048_1536/B56ZTvTGAzHEAo-/0/1739181548483?e=2147483647&v=beta&t=O-exRUQSwFcP4UyD_c4ujqzAani8oPbmqMKblkJGXLg",
-        section: "grabbers",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        name: "RxSpoofer 1",
-        description: "High-level hardware identity modification tool for maximum safety.",
-        downloadUrl: "https://shrinkme.click/kEYM694a",
-        imageUrl: "https://t2conline.com/wp-content/uploads/2022/07/maxresdefault-2.jpg",
-        section: "spoofers",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      {
-        name: "BuLLeT Lua Executor v3.0",
-        description: "Reliable and fast LUA executor for FiveM server environments.",
-        downloadUrl: "https://shrinkme.click/5d2Wh",
-        imageUrl: "https://i.ibb.co/JFq6DKmf/2-E8-Dz-dy-Gsw-HD.jpg",
-        section: "fivem",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ];
-
-    for (const tool of defaultTools) {
-      try {
-        await addDoc(collection(db, 'tools'), tool);
-        console.log(`Provisioned ${tool.name}`);
-      } catch (err) {
-        console.error(`Error provisioning ${tool.name}:`, err);
-      }
-    }
-    toast.success("Restored default site data", { id: toastId });
-  };
-
-  // Auto-provision default categories/settings if missing
-  const checkDefaults = async () => {
-    try {
-      const catDoc = await getDoc(doc(db, 'settings', 'categories'));
-      if (!catDoc.exists()) {
-        await setDoc(doc(db, 'settings', 'categories'), { list: ['fivem', 'spoofers', 'spofers', 'cheats', 'tweaks', 'grabbers'] });
-        console.log("Provisioned default categories");
-      }
-      
-      const configDoc = await getDoc(doc(db, 'settings', 'config'));
-      if (!configDoc.exists()) {
-        await setDoc(doc(db, 'settings', 'config'), {
-          siteName: "RX ELITE",
-          siteDescription: "Premium Game Enhancement Repository",
-          discordWebhookUrl: ""
-        });
-        console.log("Provisioned default config");
-      }
-    } catch (err) {
-      console.error("Default provisioning error:", err);
-    }
-  };
 
   useEffect(() => {
     if (!loading && !isAdmin) {
@@ -218,17 +103,6 @@ export default function Admin() {
   useEffect(() => {
     if (!isAdmin) return;
 
-    // Use a ref to track if we've already tried to auto-provision in this session
-    if (tools.length === 0 && !loading && isAdmin) {
-      const hasAutoProvisioned = sessionStorage.getItem('rx_auto_provisioned');
-      if (!hasAutoProvisioned) {
-        provisionDefaults();
-        sessionStorage.setItem('rx_auto_provisioned', 'true');
-      }
-    }
-
-    checkDefaults();
-
     const q = query(collection(db, 'tools'), orderBy('createdAt', 'desc'));
     const unsubscribeTools = onSnapshot(q, (snapshot) => {
       setTools(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tool)));
@@ -236,9 +110,9 @@ export default function Admin() {
 
     const unsubscribeCategories = onSnapshot(doc(db, 'settings', 'categories'), (doc) => {
       if (doc.exists()) {
-        setCategories(doc.data().list || ['fivem', 'spoofers', 'cheats', 'tweaks']);
+        setCategories(doc.data().list || []);
       } else {
-        setCategories(['fivem', 'spoofers', 'cheats', 'tweaks']);
+        setCategories([]);
       }
     });
 
@@ -284,21 +158,45 @@ export default function Admin() {
 
   const uploadFile = async (file: File, path: string): Promise<string> => {
     const isImage = file.type.startsWith('image/');
+    const setProgress = isImage ? setImageUploadProgress : setFileUploadProgress;
+    
     if (isImage) setIsImageUploading(true);
     else setIsFileUploading(true);
     
+    setProgress(0);
+    
     try {
       const storageRef = ref(storage, `${path}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(snapshot.ref);
-      return url;
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      return new Promise((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            setProgress(progress);
+          },
+          (error) => {
+            console.error(`Error uploading ${isImage ? 'image' : 'file'}:`, error instanceof Error ? error.message : error);
+            toast.error(`Failed to upload ${isImage ? 'image' : 'file'}`);
+            if (isImage) setIsImageUploading(false);
+            else setIsFileUploading(false);
+            reject(error);
+          },
+          async () => {
+            const url = await getDownloadURL(uploadTask.snapshot.ref);
+            if (isImage) setIsImageUploading(false);
+            else setIsFileUploading(false);
+            setProgress(100);
+            resolve(url);
+          }
+        );
+      });
     } catch (error) {
-      console.error(`Error uploading ${isImage ? 'image' : 'file'}:`, error instanceof Error ? error.message : error);
-      toast.error(`Failed to upload ${isImage ? 'image' : 'file'}`);
-      throw error;
-    } finally {
+      console.error(`Error initiating ${isImage ? 'image' : 'file'} upload:`, error instanceof Error ? error.message : error);
       if (isImage) setIsImageUploading(false);
       else setIsFileUploading(false);
+      throw error;
     }
   };
 
@@ -681,71 +579,66 @@ export default function Admin() {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b pb-8">
         <div>
-          <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none mb-1">RX ELITE <span className="text-primary tracking-normal not-italic font-mono text-2xl">V4.0</span></h1>
-          <p className="text-muted-foreground font-mono text-xs uppercase tracking-widest opacity-80 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            System Control & Repository Management
+          <h1 className="text-4xl font-extrabold tracking-tight mb-1">System Control</h1>
+          <p className="text-muted-foreground font-medium flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
+            Repository Nodes & Configuration
           </p>
         </div>
-        <div className="flex items-center gap-2 font-mono text-[10px] uppercase border p-2 rounded bg-muted/30">
-          <span className="opacity-50">Local Host:</span> 127.0.0.1
-          <span className="mx-2 opacity-20">|</span>
-          <span className="opacity-50">Auth Status:</span> Root Admin
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="rounded-full font-bold h-10 px-6 shrink-0" onClick={() => navigate('/')}>
+             View Site
+          </Button>
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest bg-muted/50 px-4 h-10 rounded-full border">
+            <span className="opacity-50">Auth Status:</span> Root Admin
+          </div>
         </div>
       </div>
 
-      <Tabs defaultValue="tools" className="w-full">
-        <div className="flex justify-center mb-8">
-          <TabsList className="flex w-auto p-1 bg-muted/50 border rounded-full h-12 shadow-sm">
-            <TabsTrigger value="tools" className="rounded-full px-6 transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-mono text-[10px] uppercase tracking-widest font-bold">Tools</TabsTrigger>
-            <TabsTrigger value="categories" className="rounded-full px-6 transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-mono text-[10px] uppercase tracking-widest font-bold">Categories</TabsTrigger>
-            <TabsTrigger value="bulk" className="rounded-full px-6 transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-mono text-[10px] uppercase tracking-widest font-bold">Bulk Upload</TabsTrigger>
-            <TabsTrigger value="settings" className="rounded-full px-6 transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-mono text-[10px] uppercase tracking-widest font-bold">Settings</TabsTrigger>
+      <Tabs defaultValue="tools" className="w-full space-y-8">
+        <div className="flex justify-center">
+          <TabsList className="bg-muted/50 p-1 rounded-full h-12">
+            <TabsTrigger value="tools" className="rounded-full px-8 font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm">Repository</TabsTrigger>
+            <TabsTrigger value="categories" className="rounded-full px-8 font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm">Categories</TabsTrigger>
+            <TabsTrigger value="bulk" className="rounded-full px-8 font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm">Bulk Handling</TabsTrigger>
+            <TabsTrigger value="settings" className="rounded-full px-8 font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm">Settings</TabsTrigger>
           </TabsList>
         </div>
 
         <TabsContent value="tools" className="space-y-6">
           <div className="flex justify-between items-center gap-4">
             <h2 className="text-xl font-bold uppercase italic tracking-tight">Repository Items</h2>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="gap-2 text-[10px] uppercase font-bold tracking-widest h-8"
-              onClick={() => provisionDefaults(true)}
-            >
-              <FileDown className="w-3 h-3" />
-              Reset to Defaults
-            </Button>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Add New Tool</CardTitle>
-              <CardDescription>Fill in the details to add a new tool to the repository.</CardDescription>
+          <Card className="rounded-2xl border-none ring-1 ring-border shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/30 pb-6 border-b border-border/50">
+              <CardTitle className="text-xl font-bold">Initialize New Node</CardTitle>
+              <CardDescription className="font-medium">Fill in the architectural details to add a new tool to the repository.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleAddTool} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="pt-8">
+              <form onSubmit={handleAddTool} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Tool Name</Label>
+                  <Label htmlFor="name" className="font-bold text-xs uppercase tracking-wider opacity-60">Tool Designation</Label>
                   <Input 
                     id="name" 
                     value={newTool.name} 
                     onChange={e => setNewTool({...newTool, name: e.target.value})} 
                     placeholder="e.g. RX ELITE Spoofer"
+                    className="rounded-xl h-11 bg-muted/20 border-none font-medium"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="section">Section</Label>
+                  <Label htmlFor="section" className="font-bold text-xs uppercase tracking-wider opacity-60">Sector Assignment</Label>
                   <Select 
                     value={newTool.section} 
                     onValueChange={value => setNewTool({...newTool, section: value})}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="rounded-xl h-11 bg-muted/20 border-none font-medium">
                       <SelectValue placeholder="Select section" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="rounded-xl">
                       {allAvailableSections.map(section => (
-                        <SelectItem key={section} value={section} className="capitalize">
+                        <SelectItem key={section} value={section} className="capitalize font-bold">
                           {section}
                         </SelectItem>
                       ))}
@@ -754,12 +647,12 @@ export default function Admin() {
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="description">Description</Label>
+                    <Label htmlFor="description" className="font-bold text-xs uppercase tracking-wider opacity-60">Functional Description</Label>
                     <Button 
                       type="button" 
                       variant="ghost" 
                       size="sm" 
-                      className="h-7 text-[10px] gap-1 uppercase italic font-bold text-primary"
+                      className="h-7 rounded-full text-[10px] gap-1.5 uppercase font-bold text-primary bg-primary/5 hover:bg-primary/10 px-3"
                       onClick={() => setNewTool({...newTool, description: newTool.description + (newTool.description ? ' ' : '') + '(WinRAR PW: RxWare)'})}
                     >
                       <Key className="w-3 h-3" />
@@ -771,17 +664,18 @@ export default function Admin() {
                     value={newTool.description} 
                     onChange={e => setNewTool({...newTool, description: e.target.value})} 
                     placeholder="Describe what the tool does..."
+                    className="rounded-xl min-h-[120px] bg-muted/20 border-none font-medium resize-none"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="downloadUrl">Download URL / File</Label>
+                  <Label htmlFor="downloadUrl" className="font-bold text-xs uppercase tracking-wider opacity-60">Distribution Link</Label>
                   <div className="flex gap-2">
                     <Input 
                       id="downloadUrl" 
                       value={newTool.downloadUrl} 
                       onChange={e => setNewTool({...newTool, downloadUrl: e.target.value})} 
                       placeholder="https://example.com/download"
-                      className="flex-1"
+                      className="rounded-xl h-11 bg-muted/20 border-none font-medium"
                     />
                     <div className="relative">
                       <Input
@@ -794,7 +688,7 @@ export default function Admin() {
                             try {
                               const url = await uploadFile(file, 'files');
                               setNewTool({ ...newTool, downloadUrl: url });
-                              toast.success("File uploaded successfully");
+                              toast.success("Binary successfully uplinked!");
                             } catch (err) {}
                           }
                           e.target.value = '';
@@ -802,42 +696,52 @@ export default function Admin() {
                       />
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="secondary"
                         size="icon"
+                        className="rounded-xl h-11 w-11 shadow-sm shrink-0"
                         disabled={isFileUploading}
                         onClick={() => document.getElementById('file-upload')?.click()}
-                        title="Upload tool file"
                       >
                         {isFileUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                       </Button>
                     </div>
                   </div>
+                  {isFileUploading && (
+                    <div className="mt-2 space-y-1.5 px-1">
+                      <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-50">
+                        <span>Syncing binary...</span>
+                        <span>{Math.round(fileUploadProgress)}%</span>
+                      </div>
+                      <Progress value={fileUploadProgress} className="h-1 rounded-full bg-muted shadow-inner" />
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="imageUrl">Image URL / File (Optional)</Label>
+                  <Label htmlFor="imageUrl" className="font-bold text-xs uppercase tracking-wider opacity-60">Visual Asset Link</Label>
                   <div className="flex gap-2">
-                    <div className="flex-1 space-y-2">
+                    <div className="flex-1 space-y-3">
                       <Input 
                         id="imageUrl" 
                         value={newTool.imageUrl} 
                         onChange={e => setNewTool({...newTool, imageUrl: e.target.value})} 
                         placeholder="https://example.com/image.jpg"
+                        className="rounded-xl h-11 bg-muted/20 border-none font-medium"
                       />
                       {newTool.imageUrl && (
-                        <div className="relative w-20 h-20 rounded border overflow-hidden bg-muted group">
+                        <div className="relative w-24 h-24 rounded-xl border-2 border-muted overflow-hidden bg-muted group shadow-inner">
                           <img 
                             src={newTool.imageUrl} 
                             alt="Preview" 
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                             referrerPolicy="no-referrer"
                             onError={(e) => (e.currentTarget.src = 'https://picsum.photos/seed/error/200/200')}
                           />
                           <button 
                             type="button"
                             onClick={() => setNewTool({...newTool, imageUrl: ''})}
-                            className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                            className="absolute inset-0 bg-black/40 backdrop-blur-[1px] text-white opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="w-5 h-5" />
                           </button>
                         </div>
                       )}
@@ -854,7 +758,7 @@ export default function Admin() {
                             try {
                               const url = await uploadFile(file, 'tools');
                               setNewTool({ ...newTool, imageUrl: url });
-                              toast.success("Image uploaded successfully");
+                              toast.success("Asset successfully synced!");
                             } catch (err) {}
                           }
                           e.target.value = '';
@@ -862,97 +766,106 @@ export default function Admin() {
                       />
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="secondary"
                         size="icon"
+                        className="rounded-xl h-11 w-11 shadow-sm shrink-0"
                         disabled={isImageUploading}
                         onClick={() => document.getElementById('image-upload')?.click()}
-                        title="Upload image file"
                       >
                         {isImageUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
                       </Button>
                     </div>
                   </div>
+                  {isImageUploading && (
+                    <div className="mt-2 space-y-1.5 px-1">
+                      <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-50">
+                        <span>Syncing asset...</span>
+                        <span>{Math.round(imageUploadProgress)}%</span>
+                      </div>
+                      <Progress value={imageUploadProgress} className="h-1 rounded-full bg-muted shadow-inner" />
+                    </div>
+                  )}
                 </div>
-                <Button type="submit" className="md:col-span-2 gap-2 font-bold uppercase italic">
-                  <Plus className="w-4 h-4" />
-                  Add Tool to RX ELITE
+                <Button type="submit" className="md:col-span-2 h-12 rounded-xl font-bold gap-2 shadow-lg shadow-primary/10 transition-all hover:-translate-y-0.5 active:translate-y-0">
+                  <Plus className="w-5 h-5" />
+                  Push to Production
                 </Button>
               </form>
             </CardContent>
           </Card>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <h2 className="text-xl font-semibold uppercase italic tracking-tighter">Current Repository</h2>
-              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg border border-border">
-                <span className="text-[10px] font-bold uppercase italic opacity-50 px-1">Maintenance:</span>
-                <div className="flex items-center gap-1 border rounded bg-background px-2">
-                  <span className="text-[10px] font-bold opacity-60">Latest:</span>
+              <h2 className="text-xl font-bold tracking-tight">Current Repository</h2>
+              <div className="flex items-center gap-3 p-1.5 bg-muted/50 rounded-full border border-border/50">
+                <span className="text-[10px] font-bold uppercase tracking-widest opacity-50 px-3">Maintenance</span>
+                <div className="flex items-center gap-2 bg-background/80 px-3 h-8 rounded-full border shadow-sm">
+                  <span className="text-[10px] font-bold opacity-60">Count:</span>
                   <input 
                     type="number" 
                     value={deleteCount} 
                     onChange={e => setDeleteCount(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-12 bg-transparent border-none text-xs focus:ring-0 p-1"
+                    className="w-10 bg-transparent border-none text-[10px] font-bold focus:ring-0 p-0"
                   />
                 </div>
                 <div className="flex items-center gap-1">
                   {showConfirmCheats ? (
-                    <div className="flex gap-1 animate-in fade-in slide-in-from-right-2">
-                      <Button variant="destructive" size="sm" onClick={handleBulkDeleteCheats} className="h-8 text-[10px] font-black uppercase italic">Confirm</Button>
-                      <Button variant="ghost" size="sm" onClick={() => setShowConfirmCheats(false)} className="h-8 text-[10px] font-bold">No</Button>
+                    <div className="flex gap-1 animate-in fade-in slide-in-from-right-3">
+                      <Button variant="destructive" size="sm" onClick={handleBulkDeleteCheats} className="h-8 rounded-full text-[10px] font-bold px-4">Confirm</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setShowConfirmCheats(false)} className="h-8 rounded-full text-[10px] font-bold px-4">No</Button>
                     </div>
                   ) : (
                     <Button 
                       variant="destructive" 
                       size="sm" 
-                      className="h-8 text-[10px] uppercase font-black italic gap-1"
+                      className="h-8 rounded-full text-[10px] font-bold px-4 gap-2"
                       onClick={() => setShowConfirmCheats(true)}
                       disabled={isDeletingBulk}
                     >
                       <Trash2 className="w-3 h-3" />
-                      Del CSV Cheats
+                      Clear Sector
                     </Button>
                   )}
                 </div>
 
                 <div className="flex items-center gap-1">
                   {showConfirmRecent ? (
-                    <div className="flex gap-1 animate-in fade-in slide-in-from-right-2">
-                      <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="h-8 text-[10px] font-black uppercase italic">Confirm</Button>
-                      <Button variant="ghost" size="sm" onClick={() => setShowConfirmRecent(false)} className="h-8 text-[10px] font-bold">No</Button>
+                    <div className="flex gap-1 animate-in fade-in slide-in-from-right-3">
+                      <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="h-8 rounded-full text-[10px] font-bold px-4">Confirm</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setShowConfirmRecent(false)} className="h-8 rounded-full text-[10px] font-bold px-4">No</Button>
                     </div>
                   ) : (
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className="h-8 text-[10px] uppercase font-bold italic gap-1"
+                      className="h-8 rounded-full text-[10px] font-bold px-4 gap-2 shadow-sm"
                       onClick={() => setShowConfirmRecent(true)}
                       disabled={isDeletingBulk}
                     >
                       <AlertCircle className="w-3 h-3" />
-                      Del Recent
+                      Bulk Purge
                     </Button>
                   )}
                 </div>
               </div>
             </div>
-            <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
-              <div className="grid grid-cols-[1fr_100px_120px_100px] gap-4 p-4 border-b bg-muted/50 font-serif italic text-[11px] uppercase tracking-wider opacity-60">
-                <div>Resource / Identifier</div>
-                <div>Category</div>
-                <div>Added On</div>
-                <div className="text-right">Operations</div>
+            <div className="bg-background rounded-2xl border-none ring-1 ring-border shadow-sm overflow-hidden">
+              <div className="grid grid-cols-[1fr_120px_140px_120px] gap-4 p-4 border-b bg-muted/30 text-[10px] font-bold uppercase tracking-widest opacity-50">
+                <div className="pl-2">Resource Node</div>
+                <div>Classification</div>
+                <div>Timestamp</div>
+                <div className="text-right pr-2">Control</div>
               </div>
               
-              <div className="divide-y">
+              <div className="divide-y divide-border/50">
                 {tools.map(tool => (
-                  <div key={tool.id} className="group hover:bg-muted/30 transition-colors">
+                  <div key={tool.id} className="group hover:bg-muted/10 transition-colors">
                     {isEditing === tool.id ? (
-                      <div className="p-6 bg-muted/10 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in zoom-in-95 duration-200">
-                        <div className="space-y-4">
+                      <div className="p-8 bg-muted/5 grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="space-y-6">
                           <div className="space-y-2">
                             <Label className="text-[10px] uppercase font-bold tracking-widest opacity-50">Tool Identity</Label>
-                            <Input value={tool.name} onChange={e => setTools(tools.map(t => t.id === tool.id ? {...t, name: e.target.value} : t))} className="h-10 font-bold" />
+                            <Input value={tool.name} onChange={e => setTools(tools.map(t => t.id === tool.id ? {...t, name: e.target.value} : t))} className="h-11 rounded-xl bg-background border-none ring-1 ring-border font-bold" />
                           </div>
                           
                           <div className="space-y-2">
@@ -961,12 +874,12 @@ export default function Admin() {
                               value={tool.section} 
                               onValueChange={value => setTools(tools.map(t => t.id === tool.id ? {...t, section: value} : t))}
                             >
-                              <SelectTrigger className="h-10">
+                              <SelectTrigger className="h-11 rounded-xl bg-background border-none ring-1 ring-border">
                                 <SelectValue />
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent className="rounded-xl">
                                 {allAvailableSections.map(section => (
-                                  <SelectItem key={section} value={section} className="capitalize">
+                                  <SelectItem key={section} value={section} className="capitalize font-bold">
                                     {section}
                                   </SelectItem>
                                 ))}
@@ -981,30 +894,30 @@ export default function Admin() {
                                 type="button" 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-5 text-[9px] gap-1 uppercase italic font-black text-primary hover:bg-primary/10"
+                                className="h-7 rounded-full text-[9px] gap-1.5 uppercase font-bold text-primary bg-primary/5 hover:bg-primary/10 px-3"
                                 onClick={() => setTools(tools.map(t => t.id === tool.id ? {...t, description: t.description + (t.description ? ' ' : '') + '(WinRAR PW: RxWare)'} : t))}
                               >
                                 <Key className="w-3 h-3" />
-                                Injection PW
+                                Add PW
                               </Button>
                             </div>
                             <Textarea 
                               value={tool.description} 
                               onChange={e => setTools(tools.map(t => t.id === tool.id ? {...t, description: e.target.value} : t))} 
-                              className="min-h-[120px] text-sm leading-relaxed"
+                              className="min-h-[140px] rounded-xl bg-background border-none ring-1 ring-border text-sm leading-relaxed font-medium resize-none"
                             />
                           </div>
                         </div>
 
-                        <div className="space-y-4">
+                        <div className="space-y-6">
                           <div className="space-y-2">
-                            <Label className="text-[10px] uppercase font-bold tracking-widest opacity-50">Binary Source / Payload</Label>
+                            <Label className="text-[10px] uppercase font-bold tracking-widest opacity-50">Distribution Link</Label>
                             <div className="flex gap-2">
                               <Input 
                                 value={tool.downloadUrl} 
                                 onChange={e => setTools(tools.map(t => t.id === tool.id ? {...t, downloadUrl: e.target.value} : t))} 
                                 placeholder="https://..."
-                                className="flex-1 h-10 font-mono text-xs"
+                                className="flex-1 h-11 rounded-xl bg-background border-none ring-1 ring-border font-medium"
                               />
                               <Input
                                 type="file"
@@ -1016,7 +929,7 @@ export default function Admin() {
                                     try {
                                       const url = await uploadFile(file, 'files');
                                       setTools(tools.map(t => t.id === tool.id ? {...t, downloadUrl: url} : t));
-                                      toast.success("File synchronized");
+                                      toast.success("Binary successfully synchronized!");
                                     } catch (err) {}
                                   }
                                   e.target.value = '';
@@ -1024,41 +937,50 @@ export default function Admin() {
                               />
                               <Button
                                 type="button"
-                                variant="outline"
+                                variant="secondary"
                                 size="icon"
-                                className="h-10 w-10 shrink-0"
+                                className="h-11 w-11 rounded-xl shrink-0 shadow-sm"
                                 disabled={isFileUploading}
                                 onClick={() => document.getElementById(`edit-file-upload-${tool.id}`)?.click()}
                               >
                                 {isFileUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                               </Button>
                             </div>
+                            {isFileUploading && (
+                              <div className="mt-2 space-y-1.5 px-1">
+                                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-50">
+                                  <span>Syncing binary...</span>
+                                  <span>{Math.round(fileUploadProgress)}%</span>
+                                </div>
+                                <Progress value={fileUploadProgress} className="h-1 rounded-full bg-muted shadow-inner" />
+                              </div>
+                            )}
                           </div>
 
                           <div className="space-y-2">
                             <Label className="text-[10px] uppercase font-bold tracking-widest opacity-50">Visual Asset</Label>
                             <div className="flex gap-2">
-                              <div className="flex-1 space-y-2">
+                              <div className="flex-1 space-y-3">
                                 <Input 
                                   value={tool.imageUrl} 
                                   onChange={e => setTools(tools.map(t => t.id === tool.id ? {...t, imageUrl: e.target.value} : t))} 
                                   placeholder="https://..."
-                                  className="h-10 font-mono text-xs"
+                                  className="h-11 rounded-xl bg-background border-none ring-1 ring-border font-medium"
                                 />
                                 {tool.imageUrl && (
-                                  <div className="relative w-24 h-16 rounded border overflow-hidden bg-muted group/img cursor-pointer">
+                                  <div className="relative w-32 h-20 rounded-xl border-2 border-muted/50 overflow-hidden bg-muted group/img shadow-inner transition-all hover:border-primary/30">
                                     <img 
                                       src={tool.imageUrl} 
                                       alt="Preview" 
-                                      className="w-full h-full object-cover"
+                                      className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-700"
                                       referrerPolicy="no-referrer"
                                     />
                                     <button 
                                       type="button"
                                       onClick={() => setTools(tools.map(t => t.id === tool.id ? {...t, imageUrl: ''} : t))}
-                                      className="absolute inset-0 bg-black/60 text-white opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center font-bold text-[10px] uppercase"
+                                      className="absolute inset-0 bg-black/50 backdrop-blur-[1px] text-white opacity-0 group-hover/img:opacity-100 transition-all flex items-center justify-center font-bold text-[10px] uppercase tracking-wider"
                                     >
-                                      Detach Image
+                                      Remove Asset
                                     </button>
                                   </div>
                                 )}
@@ -1074,7 +996,7 @@ export default function Admin() {
                                     try {
                                       const url = await uploadFile(file, 'tools');
                                       setTools(tools.map(t => t.id === tool.id ? {...t, imageUrl: url} : t));
-                                      toast.success("Image synchronized");
+                                      toast.success("Asset successfully synchronized!");
                                     } catch (err) {}
                                   }
                                   e.target.value = '';
@@ -1082,82 +1004,91 @@ export default function Admin() {
                               />
                               <Button
                                 type="button"
-                                variant="outline"
+                                variant="secondary"
                                 size="icon"
-                                className="h-10 w-10 shrink-0"
+                                className="h-11 w-11 rounded-xl shrink-0 shadow-sm"
                                 disabled={isImageUploading}
                                 onClick={() => document.getElementById(`edit-image-upload-${tool.id}`)?.click()}
                               >
                                 {isImageUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
                               </Button>
                             </div>
+                            {isImageUploading && (
+                              <div className="mt-2 space-y-1.5 px-1">
+                                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-50">
+                                  <span>Syncing visual...</span>
+                                  <span>{Math.round(imageUploadProgress)}%</span>
+                                </div>
+                                <Progress value={imageUploadProgress} className="h-1 rounded-full bg-muted shadow-inner" />
+                              </div>
+                            )}
                           </div>
 
-                          <div className="flex gap-2 pt-2">
-                            <Button onClick={() => handleUpdateTool(tool.id, tool)} className="flex-1 gap-2 font-bold uppercase tracking-tighter italic">
-                              <Save className="w-4 h-4" /> Finalize Update
+                          <div className="flex gap-3 pt-4">
+                            <Button onClick={() => handleUpdateTool(tool.id, tool)} className="flex-1 h-12 rounded-xl font-bold gap-2 shadow-lg shadow-primary/10">
+                              <Save className="w-4 h-4" /> Save Node Changes
                             </Button>
-                            <Button variant="outline" onClick={() => setIsEditing(null)} className="px-6 gap-2 font-bold uppercase tracking-tighter italic">
-                              <X className="w-4 h-4" /> Cancel
+                            <Button variant="outline" onClick={() => setIsEditing(null)} className="h-12 px-8 rounded-xl font-bold">
+                              Cancel
                             </Button>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-[1fr_100px_120px_100px] gap-4 p-4 items-center h-16">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 rounded border bg-muted/50 overflow-hidden shrink-0">
+                      <div className="grid grid-cols-[1fr_120px_140px_120px] gap-4 p-4 items-center h-20">
+                        <div className="flex items-center gap-4 min-w-0 pl-2">
+                          <div className="w-12 h-12 rounded-xl ring-1 ring-border/50 bg-muted/30 overflow-hidden shrink-0 shadow-inner">
                             {tool.imageUrl ? (
                               <img src={tool.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
-                                <ImageIcon className="w-4 h-4" />
+                              <div className="w-full h-full flex items-center justify-center text-muted-foreground/20">
+                                <ImageIcon className="w-5 h-5" />
                               </div>
                             )}
                           </div>
                           <div className="min-w-0">
-                            <h3 className="font-bold text-sm truncate">{tool.name}</h3>
-                            <p className="text-[10px] font-mono opacity-50 truncate uppercase tracking-tighter">ID: {tool.id.substring(0, 8)}...</p>
+                            <h3 className="font-bold text-base truncate pr-4">{tool.name}</h3>
+                            <p className="text-[10px] font-bold opacity-30 truncate uppercase tracking-widest italic">{tool.id.substring(0, 12)}</p>
                           </div>
                         </div>
                         
                         <div>
-                          <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-tighter py-0 px-2 font-normal rounded-sm">
+                          <Badge variant="secondary" className="rounded-full bg-muted/60 text-[10px] font-bold uppercase tracking-wider px-3 py-0.5 border-none">
                             {tool.section}
                           </Badge>
                         </div>
 
-                        <div className="text-[10px] font-mono opacity-40 uppercase tracking-tighter">
-                          {tool.createdAt ? new Date(tool.createdAt).toLocaleDateString() : 'N/A'}
+                        <div className="text-[10px] font-bold opacity-40 uppercase tracking-widest">
+                          {tool.createdAt ? new Date(tool.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Archive Data'}
                         </div>
 
-                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditing(tool.id)}>
-                            <Edit2 className="w-3 h-3" />
+                        <div className="flex items-center justify-end gap-2 pr-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                          <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl shadow-sm hover:bg-primary/10 hover:text-primary" onClick={() => setIsEditing(tool.id)}>
+                            <Edit2 className="w-4 h-4" />
                           </Button>
                           
                           <AlertDialog>
                             <AlertDialogTrigger
                               render={
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10">
-                                  <Trash2 className="w-3 h-3" />
+                                <Button variant="secondary" size="icon" className="h-9 w-9 rounded-xl shadow-sm border-none text-destructive/60 hover:text-destructive hover:bg-destructive/10">
+                                  <Trash2 className="w-4 h-4" />
                                 </Button>
                               }
                             />
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle className="font-serif italic">Confirm Purge?</AlertDialogTitle>
-                                <AlertDialogDescription className="text-sm">
-                                  You are about to permanently delete <span className="text-foreground font-bold">"{tool.name}"</span> from the elite cluster.
+                            <AlertDialogContent className="rounded-3xl p-8 border-none ring-1 ring-border shadow-2xl">
+                              <AlertDialogHeader className="space-y-4">
+                                <AlertDialogTitle className="text-2xl font-extrabold tracking-tight">Confirm Node Purge?</AlertDialogTitle>
+                                <AlertDialogDescription className="text-base font-medium leading-relaxed">
+                                  Are you absolutely certain? This will permanently delete <span className="text-foreground font-black">"{tool.name}"</span> from the secure repository cluster. This action is catastrophic and irreversible.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel className="font-bold uppercase tracking-tighter italic">Abort</AlertDialogCancel>
+                              <AlertDialogFooter className="pt-8 gap-3">
+                                <AlertDialogCancel className="rounded-xl h-12 px-8 font-bold border-none bg-muted/50 hover:bg-muted text-foreground">Abort</AlertDialogCancel>
                                 <AlertDialogAction 
                                   onClick={() => handleDeleteTool(tool.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold uppercase tracking-tighter italic"
+                                  className="rounded-xl h-12 px-10 bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold shadow-xl shadow-destructive/20"
                                 >
-                                  Execute
+                                  Purge Data
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -1172,79 +1103,80 @@ export default function Admin() {
           </div>
         </TabsContent>
 
-        <TabsContent value="categories" className="space-y-6">
-          <Card className="border-primary/10 overflow-hidden">
-            <CardHeader className="bg-muted/30 border-b">
-              <CardTitle className="font-serif italic text-xl">Operational Classification</CardTitle>
-              <CardDescription className="font-mono text-[10px] uppercase tracking-widest opacity-60">Manage repository filters and taxonomy</CardDescription>
+        <TabsContent value="categories" className="space-y-8 outline-none">
+          <Card className="rounded-2xl border-none ring-1 ring-border shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b border-border/50">
+              <CardTitle className="text-xl font-bold">Sector Management</CardTitle>
+              <CardDescription className="font-medium">Define and organize the operational taxonomy of the repository.</CardDescription>
             </CardHeader>
-            <CardContent className="p-6 space-y-8">
-              <div className="flex gap-4 p-4 border rounded-xl bg-card shadow-inner">
-                <div className="flex-1 space-y-1">
-                  <Label className="text-[10px] uppercase font-bold tracking-widest opacity-50 ml-1">New Descriptor</Label>
+            <CardContent className="p-8 space-y-8">
+              <div className="flex flex-col md:flex-row gap-4 p-6 rounded-2xl bg-muted/20 border border-dashed border-border/50">
+                <div className="flex-1 space-y-2">
+                  <Label className="text-[10px] uppercase font-bold tracking-widest opacity-60 ml-1">New Sector Identity</Label>
                   <Input 
                     value={newCategory} 
                     onChange={e => setNewCategory(e.target.value)} 
-                    placeholder="Enter unique category ID..."
-                    className="h-12 border-none bg-transparent text-lg font-black uppercase italic tracking-tighter focus-visible:ring-0"
+                    placeholder="Enter unique designation code..."
+                    className="h-12 border-none bg-background rounded-xl text-lg font-bold px-5 ring-1 ring-border/50 shadow-sm focus-visible:ring-primary/30"
                     onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
                   />
                 </div>
-                <Button onClick={handleAddCategory} className="h-12 px-8 font-black uppercase italic tracking-tight gap-2">
-                  <Plus className="w-5 h-5" /> Append Category
+                <Button onClick={handleAddCategory} className="md:mt-6 h-12 px-10 rounded-xl font-bold gap-2 shadow-lg shadow-primary/10 transition-all hover:-translate-y-0.5">
+                  <Plus className="w-5 h-5" /> Append Sector
                 </Button>
               </div>
 
-              <div className="space-y-4">
-                <h3 className="text-sm font-serif italic opacity-60 flex items-center gap-2">
-                  <div className="h-px bg-border flex-1" />
-                  Existing Manifest
-                  <div className="h-px bg-border flex-1" />
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-px bg-border/50 flex-1" />
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.3em] opacity-40">Active Manifest</h3>
+                  <div className="h-px bg-border/50 flex-1" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {categories.map(cat => (
-                    <div key={cat} className="flex items-center justify-between p-4 bg-muted/40 rounded-lg border-2 border-transparent hover:border-primary/20 hover:bg-muted transition-all group relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-primary/20" />
-                      <span className="font-serif italic text-sm tracking-tight">{cat}</span>
+                    <div key={cat} className="flex items-center justify-between p-4 bg-background rounded-xl border ring-1 ring-border/50 hover:ring-primary/20 hover:shadow-md transition-all group overflow-hidden">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-primary/20 group-hover:bg-primary transition-colors" />
+                        <span className="font-bold text-sm tracking-tight capitalize">{cat}</span>
+                      </div>
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10"
+                        className="h-8 w-8 rounded-lg text-destructive/40 opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => handleDeleteCategory(cat)}
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   ))}
-                  {categories.length === 0 && <p className="col-span-full text-xs italic text-muted-foreground py-4 opacity-50 px-1">Global taxonomy is empty.</p>}
+                  {categories.length === 0 && <div className="col-span-full text-center py-12 bg-muted/10 rounded-2xl border-2 border-dashed border-border/50 font-medium opacity-40">Global taxonomy manifest is empty.</div>}
                 </div>
               </div>
 
-              <div className="space-y-4 pt-6">
+              <div className="space-y-6 pt-8">
                 <div className="flex items-center gap-2">
                   <Info className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-serif italic opacity-60">Detected Metadata (Unsaved)</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-widest opacity-60">Detected Metadata Cluster (Unsynced)</h3>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {autoSections.filter(s => !categories.includes(s)).map(cat => (
-                    <div key={cat} className="flex items-center justify-between p-4 bg-muted/20 rounded-lg border border-dashed hover:border-primary/20 transition-all group">
-                      <span className="font-serif italic text-sm opacity-50">{cat}</span>
+                    <div key={cat} className="flex items-center justify-between p-4 bg-muted/10 rounded-xl border border-dashed border-border/50 transition-all group">
+                      <span className="font-bold text-sm opacity-40 capitalize">{cat}</span>
                       <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-primary opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10"
+                        variant="secondary" 
+                        size="sm" 
+                        className="h-8 rounded-lg text-[10px] font-bold uppercase px-3 opacity-60 group-hover:opacity-100 transition-all hover:bg-primary hover:text-primary-foreground"
                         onClick={() => {
                           setNewCategory(cat);
                           handleAddCategory();
                         }}
-                        title="Add to Manifest"
                       >
-                        <Plus className="w-3 h-3" />
+                        Add to Master
                       </Button>
                     </div>
                   ))}
                   {autoSections.filter(s => !categories.includes(s)).length === 0 && (
-                    <p className="col-span-full text-xs italic text-muted-foreground py-4 opacity-50 px-1">Global taxonomy is fully synced.</p>
+                    <div className="col-span-full text-xs font-bold uppercase tracking-widest opacity-30 flex items-center justify-center h-20">Global taxonomy cluster is fully synchronized.</div>
                   )}
                 </div>
               </div>
@@ -1252,81 +1184,87 @@ export default function Admin() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="bulk" className="space-y-6">
+        <TabsContent value="bulk" className="space-y-8 outline-none">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card className="border-primary/40 bg-primary/5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                <CheckCircle2 className="w-32 h-32 rotate-12" />
+            <Card className="rounded-2xl border-none ring-1 ring-primary/20 bg-primary/5 relative overflow-hidden shadow-sm">
+              <div className="absolute -top-16 -right-16 p-4 opacity-5 pointer-events-none">
+                <CheckCircle2 className="w-64 h-64 rotate-12" />
               </div>
-              <CardHeader>
+              <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-primary flex items-center gap-2 font-serif italic text-xl">
+                    <CardTitle className="text-primary text-xl font-bold tracking-tight">
                        Automated Extraction
                     </CardTitle>
-                    <CardDescription className="font-mono text-[10px] uppercase tracking-wider">Sync with Elite Master Repositories</CardDescription>
+                    <CardDescription className="font-medium text-primary/60">Synchronize with Master Tool Repositories.</CardDescription>
                   </div>
-                  <Badge variant="default" className="animate-pulse bg-primary text-[10px] font-mono border-none h-5 px-1">ELITE_LINK</Badge>
+                  <Badge className="bg-primary/20 text-primary border-none text-[10px] font-bold uppercase px-3 rounded-full">ELITE_LINK</Badge>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-background/50 border p-3 rounded font-mono text-[10px] leading-tight opacity-70">
-                  // INFILTRATION ACTIVE<br/>
-                  // TARGET: flingtrainer.com<br/>
-                  // BYPASS: Image-Validation Protocol Enabled
+              <CardContent className="space-y-6 pt-4">
+                <div className="bg-background/40 backdrop-blur-sm border-none ring-1 ring-primary/20 p-4 rounded-xl font-mono text-[10px] leading-relaxed opacity-70 shadow-inner">
+                  <span className="text-primary font-bold">// INFILTRATION_SUBNET: ACTIVE</span><br/>
+                  <span className="opacity-60">// TARGET_NODE: flingtrainer_official</span><br/>
+                  <span className="opacity-60">// AUTH_BYPASS: IMAGE_CHALLENGE_OK</span>
                 </div>
                 <Button 
                   onClick={handleScrapeFling} 
                   disabled={isScraping}
-                  className="w-full h-16 text-xl font-black uppercase italic tracking-tighter shadow-xl shadow-primary/20 group hover:scale-[1.01] transition-transform"
+                  className="w-full h-16 rounded-2xl text-xl font-extrabold tracking-tight shadow-xl shadow-primary/20 transition-all hover:-translate-y-1 active:translate-y-0"
                 >
                   {isScraping ? (
-                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <Loader2 className="w-7 h-7 animate-spin" />
                   ) : (
-                    <>
-                      <Plus className="w-6 h-6 mr-2 group-hover:rotate-90 transition-transform" />
-                      Grab Master List
-                    </>
+                    <span className="flex items-center gap-3">
+                      <Plus className="w-6 h-6" />
+                      Grab Elite Trainers
+                    </span>
                   )}
                 </Button>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Bulk Upload Tools</CardTitle>
-                <CardDescription>Upload multiple tools at once using a CSV file.</CardDescription>
+            <Card className="rounded-2xl border-none ring-1 ring-border shadow-sm overflow-hidden">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl font-bold">Manual Bulk Insertion</CardTitle>
+                <CardDescription className="font-medium">Direct processing of multiple records via structured CSV stream.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="bg-muted p-4 rounded-lg space-y-2">
-                  <p className="text-sm font-medium">CSV Format Requirements:</p>
-                  <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
-                    <li>Headers must include: <code className="bg-background px-1 rounded">name</code>, <code className="bg-background px-1 rounded">downloadUrl</code></li>
-                    <li>Optional headers: <code className="bg-background px-1 rounded">description</code>, <code className="bg-background px-1 rounded">imageUrl</code>, <code className="bg-background px-1 rounded">section</code></li>
+              <CardContent className="space-y-6 pt-4">
+                <div className="bg-muted/30 p-5 rounded-xl border-none ring-1 ring-border/30 space-y-3">
+                   <div className="flex items-center gap-2 mb-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Schema Requirements</p>
+                   </div>
+                  <ul className="text-[11px] font-medium text-muted-foreground/80 space-y-2 pl-1">
+                    <li className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-border" /> Mandatory: <code className="bg-background border rounded px-1.5 py-0.5 text-primary text-[10px] font-bold">name</code>, <code className="bg-background border rounded px-1.5 py-0.5 text-primary text-[10px] font-bold">downloadUrl</code></li>
+                    <li className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-border" /> Optional: <code className="bg-background border rounded px-1.5 py-0.5 opacity-60 text-[10px] font-bold">description</code>, <code className="bg-background border rounded px-1.5 py-0.5 opacity-60 text-[10px] font-bold">imageUrl</code>, <code className="bg-background border rounded px-1.5 py-0.5 opacity-60 text-[10px] font-bold">section</code></li>
                   </ul>
-                  <Button variant="outline" size="sm" onClick={downloadTemplate} className="mt-2 gap-2">
+                  <Button variant="outline" size="sm" onClick={downloadTemplate} className="mt-4 gap-2 rounded-full font-bold px-5 h-9 shadow-sm">
                     <FileDown className="w-4 h-4" />
-                    Download Template CSV
+                    Download Template
                   </Button>
                 </div>
 
                 <div className="space-y-4">
                   <Label 
                     htmlFor="csv-upload" 
-                    className={`block p-8 border-2 border-dashed rounded-xl text-center cursor-pointer transition-all duration-200 ${
+                    className={`block p-10 border-2 border-dashed rounded-2xl text-center cursor-pointer transition-all duration-300 ${
                       isDragging 
-                        ? "border-primary bg-primary/5 scale-[1.02]" 
-                        : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted"
+                        ? "border-primary bg-primary/5 ring-4 ring-primary/10 shadow-2xl scale-[1.01]" 
+                        : "border-border/60 hover:border-primary/40 hover:bg-muted/20"
                     } ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                   >
-                    <Upload className={`w-10 h-10 mx-auto mb-4 transition-transform duration-200 ${isDragging ? "scale-110 text-primary" : "text-muted-foreground"}`} />
-                    <div className="space-y-1">
-                      <p className="text-base font-semibold">
-                        {isDragging ? "Drop your CSV here" : "Click or drag CSV to upload"}
+                    <div className={`w-16 h-16 mx-auto mb-5 rounded-2xl bg-muted/30 flex items-center justify-center transition-all duration-300 ${isDragging ? "bg-primary/20 text-primary scale-110" : "text-muted-foreground/40 group-hover:text-primary/60"}`}>
+                      <Upload className="w-8 h-8" />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-base font-bold tracking-tight">
+                        {isDragging ? "Feed the stream" : "Drop CSV to inject data"}
                       </p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest opacity-40">Only structural data permitted</p>
                     </div>
                     <Input 
                       id="csv-upload" 
@@ -1344,30 +1282,30 @@ export default function Admin() {
           
           <div className="space-y-6">
             {bulkUploadErrors.length > 0 && (
-              <div className="mt-6 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-destructive font-semibold">
+              <div className="mt-8 space-y-4 animate-in fade-in slide-in-from-top-3 duration-500">
+                <div className="flex items-center justify-between px-2">
+                  <div className="flex items-center gap-3 text-destructive">
                     <AlertCircle className="w-5 h-5" />
-                    <h2>Upload Errors ({bulkUploadErrors.length})</h2>
+                    <h2 className="text-lg font-bold tracking-tight">Injection Faults ({bulkUploadErrors.length})</h2>
                   </div>
                   <Button 
                     variant="ghost" 
                     size="sm" 
                     onClick={() => setBulkUploadErrors([])}
-                    className="text-muted-foreground hover:text-foreground h-8"
+                    className="rounded-full font-bold text-xs hover:bg-destructive/10 hover:text-destructive px-5 h-8"
                   >
-                    Clear Errors
+                    Wipe Fault Log
                   </Button>
                 </div>
-                <div className="max-h-60 overflow-y-auto border rounded-lg divide-y bg-muted/30">
+                <div className="max-h-80 overflow-y-auto rounded-2xl border-none ring-1 ring-border/50 divide-y divide-border/30 bg-muted/10 shadow-inner">
                   {bulkUploadErrors.map((err, idx) => (
-                    <div key={idx} className="p-3 text-sm flex items-start gap-3 hover:bg-muted/50 transition-colors">
-                      <span className="bg-destructive/10 text-destructive px-2 py-0.5 rounded font-mono text-xs mt-0.5 shrink-0">
+                    <div key={idx} className="p-4 text-sm flex items-start gap-4 hover:bg-muted/20 transition-colors">
+                      <span className="bg-destructive/20 text-destructive px-3 py-1 rounded-lg font-bold text-[10px] uppercase tracking-widest mt-0.5 shrink-0 shadow-sm">
                         Row {err.row}
                       </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{err.name}</p>
-                        <p className="text-muted-foreground text-xs break-words">{err.error}</p>
+                      <div className="flex-1 min-w-0 pr-4">
+                        <p className="font-extrabold text-foreground truncate mb-0.5">{err.name}</p>
+                        <p className="text-muted-foreground text-[11px] font-medium leading-relaxed italic opacity-80">{err.error}</p>
                       </div>
                     </div>
                   ))}
@@ -1376,81 +1314,105 @@ export default function Admin() {
             )}
 
             <AlertDialog open={showBulkConfirm} onOpenChange={setShowBulkConfirm}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Confirm Bulk Upload</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    You are about to upload <span className="font-bold text-foreground">{bulkUploadData.length}</span> tools to the repository. 
-                    Are you sure you want to proceed?
-                  </AlertDialogDescription>
+              <AlertDialogContent className="rounded-3xl p-10 border-none ring-1 ring-border shadow-2xl max-w-md">
+                <AlertDialogHeader className="space-y-5 text-center">
+                  <div className="w-20 h-20 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-inner">
+                     <Upload className="w-10 h-10" />
+                  </div>
+                  <div className="space-y-2">
+                    <AlertDialogTitle className="text-3xl font-extrabold tracking-tight">Confirm Mass Injection</AlertDialogTitle>
+                    <AlertDialogDescription className="text-base font-medium leading-relaxed">
+                      You are about to inject <span className="font-black text-foreground underline decoration-primary decoration-2 underline-offset-4">{bulkUploadData.length}</span> structured records into the main repository. Verify integrity before proceeding.
+                    </AlertDialogDescription>
+                  </div>
                 </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setBulkUploadData([])}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleBulkUpload}>
-                    Start Upload
+                <AlertDialogFooter className="pt-10 flex-col sm:flex-row gap-3">
+                  <AlertDialogCancel onClick={() => setBulkUploadData([])} className="rounded-xl h-14 flex-1 font-bold border-none bg-muted/60 hover:bg-muted text-foreground text-lg">Abort Feed</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleBulkUpload} className="rounded-xl h-14 flex-1 font-bold shadow-xl shadow-primary/20 text-lg">
+                    Execute Inject
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
 
             {isUploading && (
-              <div className="mt-4 space-y-2 text-center">
-                <p className="text-sm font-medium animate-pulse">Processing your tools...</p>
-                <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-                  <div className="bg-primary h-full animate-progress-indeterminate"></div>
+              <div className="mt-8 space-y-4 text-center bg-muted/10 p-10 rounded-3xl border border-dashed border-border/50">
+                <div className="relative inline-flex h-12 w-12 items-center justify-center">
+                   <div className="absolute inset-0 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                   <Loader2 className="w-5 h-5 text-primary animate-pulse" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-lg font-bold tracking-tight">Processing Data Stream...</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] opacity-40">Integrating blocks into global cluster</p>
+                </div>
+                <div className="w-full max-w-sm mx-auto bg-muted/30 rounded-full h-1.5 overflow-hidden ring-1 ring-border/50">
+                  <div className="bg-primary h-full animate-progress-indeterminate shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
                 </div>
               </div>
             )}
           </div>
         </TabsContent>
 
-        <TabsContent value="settings">
-          <Card>
-            <CardHeader>
-              <CardTitle>Site Settings</CardTitle>
-              <CardDescription>Configure global site parameters and integrations.</CardDescription>
+        <TabsContent value="settings" className="outline-none">
+          <Card className="rounded-2xl border-none ring-1 ring-border shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b border-border/50">
+              <CardTitle className="text-xl font-bold">Global Configuration</CardTitle>
+              <CardDescription className="font-medium">Define systemic parameters and external communication hooks.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="webhook" className="flex items-center gap-2">
-                  <BellRing className="w-4 h-4" />
-                  Discord Webhook URL
-                </Label>
-                <Input 
-                  id="webhook" 
-                  value={settings.discordWebhookUrl} 
-                  onChange={e => setSettings({...settings, discordWebhookUrl: e.target.value})} 
-                  placeholder="https://discord.com/api/webhooks/..."
-                />
-                <p className="text-xs text-muted-foreground">
-                  New tools will be automatically announced to this Discord channel.
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="siteName">Site Name</Label>
-                <Input 
-                  id="siteName" 
-                  value={settings.siteName} 
-                  onChange={e => setSettings({...settings, siteName: e.target.value})} 
-                  placeholder="RX ELITE"
-                />
+            <CardContent className="p-8 space-y-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div className="space-y-6">
+                   <div className="space-y-2">
+                    <Label htmlFor="siteName" className="font-bold text-xs uppercase tracking-wider opacity-60 ml-1">Repository Name</Label>
+                    <Input 
+                      id="siteName" 
+                      value={settings.siteName} 
+                      onChange={e => setSettings({...settings, siteName: e.target.value})} 
+                      placeholder="RX ELITE"
+                      className="rounded-xl h-12 bg-muted/20 border-none px-5 font-bold text-lg"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="siteDesc" className="font-bold text-xs uppercase tracking-wider opacity-60 ml-1">System Objective (Bio)</Label>
+                    <Textarea 
+                      id="siteDesc" 
+                      value={settings.siteDescription} 
+                      onChange={e => setSettings({...settings, siteDescription: e.target.value})} 
+                      placeholder="Premium tool repository..."
+                      className="rounded-xl min-h-[140px] bg-muted/20 border-none px-5 py-4 font-medium resize-none leading-relaxed"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook" className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider opacity-60 ml-1">
+                      External Comms: Discord Webhook
+                    </Label>
+                    <Input 
+                      id="webhook" 
+                      value={settings.discordWebhookUrl} 
+                      onChange={e => setSettings({...settings, discordWebhookUrl: e.target.value})} 
+                      placeholder="https://discord.com/api/webhooks/..."
+                      className="rounded-xl h-12 bg-muted/20 border-none px-5 font-mono text-xs overflow-hidden text-ellipsis"
+                    />
+                    <div className="flex gap-2 p-4 rounded-xl bg-primary/5 ring-1 ring-primary/10 mt-4">
+                       <BellRing className="w-5 h-5 text-primary shrink-0 opacity-60" />
+                       <p className="text-[11px] font-bold text-primary/80 leading-snug">
+                         System status: Uplink Active. Newly deployed nodes will be broadcasted to this secure channel instantly.
+                       </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="siteDesc">Site Description</Label>
-                <Textarea 
-                  id="siteDesc" 
-                  value={settings.siteDescription} 
-                  onChange={e => setSettings({...settings, siteDescription: e.target.value})} 
-                  placeholder="Premium tool repository..."
-                />
+              <div className="pt-4">
+                <Button onClick={handleSaveSettings} className="w-full h-14 rounded-2xl font-bold text-lg gap-3 shadow-xl shadow-primary/10 transition-all hover:scale-[1.01] active:translate-y-0">
+                  <Save className="w-6 h-6" />
+                  Preserve Global Config
+                </Button>
               </div>
-
-              <Button onClick={handleSaveSettings} className="w-full gap-2">
-                <Save className="w-4 h-4" />
-                Save All Settings
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>
