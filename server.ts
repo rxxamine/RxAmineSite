@@ -24,10 +24,6 @@ const __dirname = path.dirname(__filename);
 // Allowed categories matching Admin.tsx
 const ALLOWED_CATEGORIES = ['elite', 'fivem', 'spoofers', 'cheats', 'tweaks', 'grabbers'];
 
-// VaultCord Settings (Ideally from env)
-const VAULTCORD_CLIENT_ID = process.env.VAULTCORD_CLIENT_ID || "";
-const VAULTCORD_CLIENT_SECRET = process.env.VAULTCORD_CLIENT_SECRET || "";
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -132,102 +128,6 @@ async function startServer() {
       console.error("Scraping error:", error);
       res.status(500).json({ error: "Failed to scrape flingtrainer" });
     }
-  });
-
-  // VaultCord Auth Start
-  app.get("/api/auth/vaultcord/url", (req, res) => {
-    const protocol = req.headers['x-forwarded-proto'] || 'http';
-    const host = req.headers.host;
-    const redirectUri = `${protocol}://${host}/auth/vaultcord/callback`;
-    
-    if (!VAULTCORD_CLIENT_ID) {
-      // Return a "Mock" link for development if no ID is provided, 
-      // but warn that it's in demo mode
-      console.warn("VAULTCORD_CLIENT_ID is missing. Discord verification will run in DEMO mode.");
-      const mockUrl = `/auth/vaultcord/callback?code=mock_code_for_demo`;
-      return res.json({ url: mockUrl });
-    }
-    
-    // This is the VaultCord OAuth2 URL
-    const oauthUrl = `https://vaultcord.com/oauth2/authorize?client_id=${VAULTCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify+guilds.join`;
-    
-    res.json({ url: oauthUrl });
-  });
-
-  // VaultCord Callback
-  app.get("/auth/vaultcord/callback", async (req, res) => {
-    const { code } = req.query;
-
-    if (!code) {
-      return res.status(400).send("Verification failed: No code provided.");
-    }
-
-    // In a production app, we would exchange the code for a token here.
-    // Since we're in a specialized environment, we'll signal success if a code is present.
-
-    res.send(`
-      <html>
-        <head>
-          <title>Elite Verification Success</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;900&display=swap');
-            body { 
-              background: #09090b; 
-              color: #fff; 
-              font-family: 'Inter', sans-serif; 
-              display: flex; 
-              align-items: center; 
-              justify-content: center; 
-              height: 100vh; 
-              margin: 0;
-              text-transform: uppercase;
-              font-style: italic;
-            }
-            .card {
-              text-align: center;
-              padding: 3rem;
-              border: 2px solid #3f3f46;
-              border-radius: 2rem;
-              background: #18181b;
-              box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-              max-width: 400px;
-            }
-            h2 { color: #00ff00; font-weight: 900; font-size: 2rem; letter-spacing: -0.05em; margin-bottom: 0.5rem; }
-            p { color: #a1a1aa; font-weight: 500; font-size: 0.875rem; }
-            .glow {
-              width: 60px;
-              height: 60px;
-              background: #00ff00;
-              filter: blur(40px);
-              position: absolute;
-              top: 50%;
-              left: 50%;
-              transform: translate(-50%, -50%);
-              opacity: 0.2;
-              z-index: -1;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="glow"></div>
-          <div class="card">
-            <h2>Elite Access Granted</h2>
-            <p>VaultCord has verified your identity.</p>
-            <p style="margin-top: 2rem; font-size: 0.75rem; opacity: 0.5;">This window will close automatically...</p>
-          </div>
-          <script>
-            setTimeout(() => {
-              if (window.opener) {
-                window.opener.postMessage({ type: 'VAULTCORD_AUTH_SUCCESS' }, '*');
-                window.close();
-              } else {
-                window.location.href = '/';
-              }
-            }, 1500);
-          </script>
-        </body>
-      </html>
-    `);
   });
 
   // API Route for Discord Webhook

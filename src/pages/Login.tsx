@@ -35,8 +35,22 @@ export default function Login({ isAdminMode = false }: LoginProps) {
 
   const handleDiscordVerify = () => {
     const externalLink = "https://discord.com/oauth2/authorize?client_id=1363459708748435656&redirect_uri=https://vaultcord.win/auth&response_type=code&scope=identify%20guilds.join&state=105064&prompt=none";
+    
+    setLoading(true);
     window.open(externalLink, '_blank');
     toast.info("Verification started. Access will be automatic once finished.");
+
+    // 8-second delay for background verification simulation
+    setTimeout(() => {
+      checkVerification();
+      toast.success("Elite Access Granted. Synchronizing session...");
+      
+      // Final short delay after access is granted before navigating
+      setTimeout(() => {
+        navigate('/');
+        setLoading(false);
+      }, 1000);
+    }, 8000);
   };
 
   const handleAdminAuth = async () => {
